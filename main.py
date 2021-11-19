@@ -94,6 +94,7 @@ def get_args_parser():
                         help='start epoch')
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--num_workers', default=2, type=int)
+    parser.add_argument('--local_rank', type=int)
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -123,6 +124,7 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
+        args.gpu = args.local_rank
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)

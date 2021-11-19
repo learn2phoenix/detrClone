@@ -4,6 +4,7 @@ COCO dataset which returns image_id for evaluation.
 
 Mostly copy-paste from https://github.com/pytorch/vision/blob/13b35ff/references/detection/coco_utils.py
 """
+import json
 from pathlib import Path
 
 import torch
@@ -21,6 +22,8 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         self.prepare = ConvertCocoPolysToMask(return_masks)
 
     def __getitem__(self, idx):
+        # print(f'idx: {idx}')
+        # print(f'parent ids: {self.ids[idx]}')
         img, target = super(CocoDetection, self).__getitem__(idx)
         image_id = self.ids[idx]
         target = {'image_id': image_id, 'annotations': target}
@@ -154,5 +157,8 @@ def build(image_set, args):
     }
 
     img_folder, ann_file = PATHS[image_set]
+    print(f'Image folder:{img_folder}')
+    print(f'ann file:{ann_file}')
     dataset = CocoDetection(img_folder, ann_file, transforms=make_coco_transforms(image_set), return_masks=args.masks)
+    print(f'dataset: {dataset}')
     return dataset
