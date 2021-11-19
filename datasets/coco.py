@@ -146,6 +146,21 @@ def make_coco_transforms(image_set):
 
     raise ValueError(f'unknown {image_set}')
 
+def build_pascal(image_set, args):
+    root = Path(args.coco_path)
+    assert root.exists(), f'provided COCO path {root} does not exist'
+    mode = 'instances'
+    PATHS = {
+        "train": (root / "images", root / "annotations" / f'{mode}_train2017.json'),
+        "val": (root / "images", root / "annotations" / f'{mode}_val2017.json'),
+    }
+
+    img_folder, ann_file = PATHS[image_set]
+    # print(f'Image folder:{img_folder}')
+    # print(f'ann file:{ann_file}')
+    dataset = CocoDetection(img_folder, ann_file, transforms=make_coco_transforms(image_set), return_masks=args.masks)
+    # print(f'dataset: {dataset}')
+    return dataset
 
 def build(image_set, args):
     root = Path(args.coco_path)
