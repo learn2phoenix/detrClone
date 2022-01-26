@@ -1,3 +1,5 @@
+experiments_coco
+*.sh
 .nfs*
 *.ipynb
 *.pyc
