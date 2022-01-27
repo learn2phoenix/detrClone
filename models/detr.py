@@ -34,8 +34,9 @@ class DETR(nn.Module):
         self.num_queries = num_queries
         self.transformer = transformer
         hidden_dim = transformer.d_model
-        self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
-        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        self.weak_classifier = nn.Linear(num_queries*hidden_dim, num_classes)
+        # self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
+        # self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
         self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
         self.backbone = backbone
@@ -64,9 +65,11 @@ class DETR(nn.Module):
         assert mask is not None
         hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
 
-        outputs_class = self.class_embed(hs)
-        outputs_coord = self.bbox_embed(hs).sigmoid()
-        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
+        weak_class = self.weak_classifier(hs.reshape((hs.shape[0], hs.shape[1], hs.shape[2]*hs.shape[3])))
+        # outputs_class = self.class_embed(hs)
+        # outputs_coord = self.bbox_embed(hs).sigmoid()
+        # out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'weak_class': weak_class[-1]}
+        out = {'weak_class': weak_class[-1]}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
         return out
@@ -124,6 +127,21 @@ class SetCriterion(nn.Module):
         if log:
             # TODO this should probably be a separate loss, not hacked in this one here
             losses['class_error'] = 100 - accuracy(src_logits[idx], target_classes_o)[0]
+        return losses
+
+    def loss_weak(self, outputs, targets):
+        """Multiclass Classification loss
+        targets dicts must contain the key "weak_class" containing a tensor of dim [nb_target_boxes]
+        """
+        assert 'weak_class' in outputs
+        src_logits = outputs['weak_class']
+
+        target_indices = [torch.unique(t["labels"]) for t in targets]
+        target_ = [torch.zeros(src_logits.shape[1],device=src_logits.device).scatter_(0, i,1) for i in target_indices]
+        target_ = torch.vstack(target_)
+
+        loss_weak = F.binary_cross_entropy_with_logits(src_logits, target_)
+        losses = {'loss_weak': loss_weak}
         return losses
 
     @torch.no_grad()
@@ -222,7 +240,7 @@ class SetCriterion(nn.Module):
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
 
         # Retrieve the matching between the outputs of the last layer and the targets
-        indices = self.matcher(outputs_without_aux, targets)
+        # indices = self.matcher(outputs_without_aux, targets)
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
@@ -233,8 +251,9 @@ class SetCriterion(nn.Module):
 
         # Compute all the requested losses
         losses = {}
-        for loss in self.losses:
-            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+        # for loss in self.losses:
+        #     losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+        losses.update(self.loss_weak(outputs, targets))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if 'aux_outputs' in outputs:
