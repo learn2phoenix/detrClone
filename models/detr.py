@@ -34,7 +34,7 @@ class DETR(nn.Module):
         self.num_queries = num_queries
         self.transformer = transformer
         hidden_dim = transformer.d_model
-        self.weak_classifier = nn.Linear(num_queries*hidden_dim, num_classes)
+        self.weak_classifier = nn.Linear(hidden_dim, 1)
         # self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
         # self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
@@ -65,7 +65,7 @@ class DETR(nn.Module):
         assert mask is not None
         hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
         
-        weak_class = self.weak_classifier(hs.reshape((hs.shape[0], hs.shape[1], hs.shape[2]*hs.shape[3])))
+        weak_class = self.weak_classifier(hs)
         # outputs_class = self.class_embed(hs)
         # outputs_coord = self.bbox_embed(hs).sigmoid()
         # out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'weak_class': weak_class[-1]}
@@ -134,12 +134,11 @@ class SetCriterion(nn.Module):
         targets dicts must contain the key "weak_class" containing a tensor of dim [nb_target_boxes]
         """
         assert 'weak_class' in outputs
-        src_logits = outputs['weak_class']
+        src_logits = outputs['weak_class'].squeeze()
 
         target_indices = [torch.unique(t["labels"]) for t in targets]
         target_ = [torch.zeros(src_logits.shape[1],device=src_logits.device).scatter_(0, i,1) for i in target_indices]
         target_ = torch.vstack(target_)
-
         loss_weak = F.binary_cross_entropy_with_logits(src_logits, target_)
         losses = {'loss_weak': loss_weak}
         return losses
