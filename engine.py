@@ -86,19 +86,18 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
 
 
     for samples, targets in metric_logger.log_every(data_loader, 10, header):
-        print(len(targets))
-        if(len(targets)==1):
-            import pdb; pdb.set_trace()
+        # if(len(targets)==1):
+        #     import pdb; pdb.set_trace()
+        
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
         outputs = model(samples)
-
+        
         src_logits = outputs['weak_class'].squeeze()
 
         target_indices = [torch.unique(t["labels"]) for t in targets]
-        # print(target_indices)
-        target_ = [torch.zeros(src_logits.shape[1],device=src_logits.device).scatter_(0, i,1) for i in target_indices]
-        target_ = torch.vstack(target_)
+        target_ = [torch.zeros(src_logits.shape[-1],device=src_logits.device).scatter_(0, i,1) for i in target_indices]
+        target_ = torch.vstack(target_).squeeze()
 
         loss_weak = F.binary_cross_entropy_with_logits(src_logits, target_)
         src_logits = torch.sigmoid(src_logits)

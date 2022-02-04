@@ -194,10 +194,6 @@ def main(args):
     print("Start training")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
-        # import pdb; pdb.set_trace()
-        test_stats = evaluate(
-            model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
-        )
         if args.distributed:
             sampler_train.set_epoch(epoch)
         train_stats = train_one_epoch(
