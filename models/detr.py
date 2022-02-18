@@ -129,18 +129,30 @@ class SetCriterion(nn.Module):
             losses['class_error'] = 100 - accuracy(src_logits[idx], target_classes_o)[0]
         return losses
 
+    # def loss_weak(self, outputs, targets):
+    #     """Multiclass Classification loss
+    #     targets dicts must contain the key "weak_class" containing a tensor of dim [nb_target_boxes]
+    #     """
+    #     assert 'weak_class' in outputs
+    #     src_logits = outputs['weak_class'].squeeze()
+    #
+    #     target_indices = [torch.unique(t["labels"]) for t in targets]
+    #     target_ = [torch.zeros(src_logits.shape[1],device=src_logits.device).scatter_(0, i,1) for i in target_indices]
+    #     target_ = torch.vstack(target_)
+    #
+    #     loss_weak = F.binary_cross_entropy_with_logits(src_logits, target_)
+    #     losses = {'loss_weak': loss_weak}
+    #     return losses
+
     def loss_weak(self, outputs, targets):
         """Multiclass Classification loss
         targets dicts must contain the key "weak_class" containing a tensor of dim [nb_target_boxes]
         """
         assert 'weak_class' in outputs
         src_logits = outputs['weak_class'].squeeze()
-
         target_indices = [torch.unique(t["labels"]) for t in targets]
-        target_ = [torch.zeros(src_logits.shape[1],device=src_logits.device).scatter_(0, i,1) for i in target_indices]
-        target_ = torch.vstack(target_)
-
-        loss_weak = F.binary_cross_entropy_with_logits(src_logits, target_)
+        target_ = torch.vstack(target_indices).view(-1)
+        loss_weak = F.cross_entropy(src_logits, target_)
         losses = {'loss_weak': loss_weak}
         return losses
 
