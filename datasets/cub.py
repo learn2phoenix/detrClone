@@ -3,7 +3,16 @@ from pathlib import Path
 from PIL import Image
 import datasets.transforms as T
 import torch.utils.data
+import torch
 
+from torchvision.utils import save_image, draw_bounding_boxes
+from util.box_ops import box_cxcywh_to_xyxy
+
+def box_xyxy_to_cxcywh(x):
+    x0, y0, x1, y1 = x.unbind(-1)
+    b = [(x0 + x1) / 2, (y0 + y1) / 2,
+         (x1 - x0), (y1 - y0)]
+    return torch.stack(b, dim=-1)
 
 class CUBDataset(torch.utils.data.Dataset):
     def __init__(self, img_folder, images, classes, class_anno, box_anno, split_info, split, transforms=None):
@@ -46,7 +55,7 @@ class CUBDataset(torch.utils.data.Dataset):
         image_labels = []
         with open(class_anno, 'r') as fp:
             lines = fp.readlines()
-            list(map(lambda x: image_labels.append(int(lines[x - 1].strip('\n').split(' ')[-1])), self.image_ids))
+            list(map(lambda x: image_labels.append(int(lines[x - 1].strip('\n').split(' ')[-1])-1), self.image_ids)) #to index from 0
         return image_labels
 
     def get_boxes(self, box_anno):
@@ -59,14 +68,20 @@ class CUBDataset(torch.utils.data.Dataset):
         return boxes
 
     def __getitem__(self, idx):
+        # import pdb; pdb.set_trace()
         img = Image.open(f'{self.img_dir}/{self.image_names[idx]}').convert('RGB')
         target_label = self.image_labels[idx]
         target = dict()
         target['labels'] = torch.Tensor(np.asarray([target_label]).astype(np.int64)).long()
         target['img_id'] = torch.Tensor(np.asarray([self.image_ids[idx]]).astype(np.int64)).long()
         target['boxes'] = torch.Tensor(np.asarray([self.boxes[self.image_ids[idx]]]))
+        bb = target['boxes']
+        bb[0][2] = bb[0][0] + bb[0][2]
+        bb[0][3] = bb[0][1] + bb[0][3]
+        target['boxes'] = bb
         if self._transforms is not None:
             img, target = self._transforms(img, target)
+        
         # img = np.asarray(img)
         return img, target
 
@@ -80,25 +95,33 @@ def make_cub_transforms(image_set):
         T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
 
-    scales = [480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800]
+    # scales = [480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800]
+
+    # if image_set == 'train':
+    #     return T.Compose([
+    #         T.RandomHorizontalFlip(),
+    #         T.RandomResize(scales, max_size=1333),
+    #         normalize,
+    #     ])
+
+    # if image_set == 'val':
+    #     return T.Compose([
+    #         T.RandomResize([800], max_size=1333),
+    #         normalize,
+    #     ])
+
+    scales = [480]
 
     if image_set == 'train':
         return T.Compose([
             T.RandomHorizontalFlip(),
-            T.RandomSelect(
-                T.RandomResize(scales, max_size=1333),
-                T.Compose([
-                    T.RandomResize([400, 500, 600]),
-                    T.RandomSizeCrop(384, 600),
-                    T.RandomResize(scales, max_size=1333),
-                ])
-            ),
+            T.RandomResize(scales, max_size=480),
             normalize,
         ])
 
     if image_set == 'val':
         return T.Compose([
-            T.RandomResize([800], max_size=1333),
+            T.RandomResize([480], max_size=480),
             normalize,
         ])
 

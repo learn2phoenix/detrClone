@@ -14,9 +14,9 @@ from util.misc import (NestedTensor, nested_tensor_from_tensor_list,
 from .backbone import build_backbone
 from .matcher import build_matcher
 from .segmentation import (DETRsegm, PostProcessPanoptic, PostProcessSegm,
-                           dice_loss, sigmoid_focal_loss)
+                           dice_loss)
 from .transformer import build_transformer
-
+from torchvision.ops import sigmoid_focal_loss
 
 class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
@@ -34,7 +34,6 @@ class DETR(nn.Module):
         self.num_queries = num_queries
         self.transformer = transformer
         hidden_dim = transformer.d_model
-        # self.weak_classifier = nn.ModuleList([nn.Linear(hidden_dim, 1)]*num_queries)
         self.weak_classifier = nn.Linear(hidden_dim, 1)
         # self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
         # self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
@@ -65,14 +64,8 @@ class DETR(nn.Module):
         src, mask = features[-1].decompose()
         assert mask is not None
         hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
-        # op = []
-        # for mlp_index in range(len(self.weak_classifier)):
-        #     op.append(self.weak_classifier[mlp_index](hs[:,:,mlp_index,:]))
-        # weak_class = torch.cat(op, 2)
-
-            
+        
         weak_class = self.weak_classifier(hs)
-
         # outputs_class = self.class_embed(hs)
         # outputs_coord = self.bbox_embed(hs).sigmoid()
         # out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'weak_class': weak_class[-1]}
@@ -144,8 +137,12 @@ class SetCriterion(nn.Module):
         src_logits = outputs['weak_class'].squeeze()
 
         target_indices = [torch.unique(t["labels"]) for t in targets]
-        target_ = torch.vstack(target_indices).view(-1)
-        loss_weak = F.cross_entropy(src_logits, target_)
+        target_ = [torch.zeros(src_logits.shape[1],device=src_logits.device).scatter_(0, i,1) for i in target_indices]
+        target_ = torch.vstack(target_)
+        loss_weak = F.binary_cross_entropy_with_logits(src_logits, target_)
+        # print(torch.where(src_logits<0)[0].shape)
+        # import pdb; pdb.set_trace()
+        # loss_weak = sigmoid_focal_loss(src_logits, target_,reduction='mean', gamma = 4)
         losses = {'loss_weak': loss_weak}
         return losses
 

@@ -34,7 +34,6 @@ class DETR(nn.Module):
         self.num_queries = num_queries
         self.transformer = transformer
         hidden_dim = transformer.d_model
-        # self.weak_classifier = nn.ModuleList([nn.Linear(hidden_dim, 1)]*num_queries)
         self.weak_classifier = nn.Linear(hidden_dim, 1)
         # self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
         # self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
@@ -65,14 +64,8 @@ class DETR(nn.Module):
         src, mask = features[-1].decompose()
         assert mask is not None
         hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
-        # op = []
-        # for mlp_index in range(len(self.weak_classifier)):
-        #     op.append(self.weak_classifier[mlp_index](hs[:,:,mlp_index,:]))
-        # weak_class = torch.cat(op, 2)
-
-            
+        
         weak_class = self.weak_classifier(hs)
-
         # outputs_class = self.class_embed(hs)
         # outputs_coord = self.bbox_embed(hs).sigmoid()
         # out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1], 'weak_class': weak_class[-1]}
